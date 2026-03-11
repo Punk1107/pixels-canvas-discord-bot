@@ -2,6 +2,9 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from database.postgres import db
+from canvas.renderer import is_valid_color, canvas_cache
+from config import CANVAS_WIDTH, CANVAS_HEIGHT
+from PIL import Image, ImageDraw, ImageFont
 
 class AdminCommand(commands.Cog):
     def __init__(self, bot):
@@ -77,14 +80,11 @@ class AdminCommand(commands.Cog):
     )
     @app_commands.default_permissions(administrator=True)
     async def fill(self, interaction: discord.Interaction, x1: int, y1: int, x2: int, y2: int, color: str):
-        from canvas.renderer import is_valid_color
-        
         if not is_valid_color(color):
             await interaction.response.send_message("❌ Invalid color string.", ephemeral=True)
             return
 
         # Clamp bounding box
-        from config import CANVAS_WIDTH, CANVAS_HEIGHT
         x_min = max(0, min(x1, x2))
         x_max = min(CANVAS_WIDTH - 1, max(x1, x2))
         y_min = max(0, min(y1, y2))
@@ -140,10 +140,6 @@ class AdminCommand(commands.Cog):
     )
     @app_commands.default_permissions(administrator=True)
     async def drawtext(self, interaction: discord.Interaction, x: int, y: int, text: str, color: str):
-        from canvas.renderer import is_valid_color
-        from PIL import Image, ImageDraw, ImageFont
-        from config import CANVAS_WIDTH, CANVAS_HEIGHT
-        
         if not is_valid_color(color):
             await interaction.response.send_message("❌ Invalid color string.", ephemeral=True)
             return
@@ -204,6 +200,17 @@ class AdminCommand(commands.Cog):
                         
         except Exception as e:
             await interaction.followup.send(f"❌ Error drawing text: {str(e)}")
+
+    @app_commands.command(name="sync", description="Sync slash commands to the current server immediately (Admin only)")
+    @app_commands.default_permissions(administrator=True)
+    async def sync_commands(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            self.bot.tree.copy_global_to(guild=interaction.guild)
+            await self.bot.tree.sync(guild=interaction.guild)
+            await interaction.followup.send("✅ Slash commands manually synchronized to this server successfully! You should see `/color` and other commands immediately.")
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error syncing commands: {str(e)}")
 
 async def setup(bot):
     await bot.add_cog(AdminCommand(bot))
