@@ -15,19 +15,27 @@ class UtilCommand(commands.Cog):
             description="Welcome to the Pixel Canvas! Collaborate with others to draw art one pixel at a time.",
             color=discord.Color.blurple()
         )
+        # Core & Drawing
         embed.add_field(name="🖌️ /color <x> <y> <color>", value="Place a pixel at the coordinates. Type color to see suggestions.", inline=False)
         embed.add_field(name="🖼️ /canvas", value="View the entire canvas as an image.", inline=False)
         embed.add_field(name="🔍 /view <x> <y> <radius>", value="View a zoomed-in section of the canvas.", inline=False)
-        embed.add_field(name="⏳ /timelapse", value="Generate an animated GIF of the canvas history.", inline=False)
+        embed.add_field(name="🎨 /palette", value="See a visual swatch of all basic supported colors.", inline=False)
+        embed.add_field(name="⏳ /cooldown", value="Check how long until you can draw another pixel.", inline=False)
         embed.add_field(name="↩️ /undo", value="Undo your last pixel placement (within 5 minutes).", inline=False)
+        
+        # Info & Leaderboards
         embed.add_field(name="ℹ️ /info <x> <y>", value="See who placed a specific pixel.", inline=False)
         embed.add_field(name="📊 /stats [user]", value="Check a user's total pixels drawn and global rank.", inline=False)
         embed.add_field(name="🏆 /leaderboard", value="View the top 10 pixel contributors.", inline=False)
-        embed.add_field(name="🎨 /palette", value="See a visual swatch of all basic supported colors.", inline=False)
+        embed.add_field(name="🏠 /local_board", value="View the top 10 pixel contributors in this specific server.", inline=False)
+        embed.add_field(name="⏳ /timelapse", value="Generate an animated GIF of the canvas history.", inline=False)
+        
+        # Factions
+        embed.add_field(name="🤝 Faction Commands", value="`/join_faction`, `/leave_faction`, `/faction_board`", inline=False)
         
         # Admin section
         if interaction.user.guild_permissions.administrator:
-            embed.add_field(name="🛡️ Admin Commands", value="`/protect`, `/unprotect`, `/reset`, `/setlogchannel`, `/blacklist`, `/unblacklist`", inline=False)
+            embed.add_field(name="🛡️ Admin Commands", value="`/protect`, `/unprotect`, `/reset`, `/setlogchannel`, `/blacklist`, `/unblacklist`, `/fill`, `/drawtext`", inline=False)
             
         await interaction.response.send_message(embed=embed)
 

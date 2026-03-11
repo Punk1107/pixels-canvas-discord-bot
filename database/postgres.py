@@ -137,6 +137,7 @@ class Database:
                     SELECT $1, $2, $3
                     WHERE NOT COALESCE((SELECT is_protected FROM existing_pixel), FALSE)
                     ON CONFLICT (x, y) DO UPDATE SET color = EXCLUDED.color
+                    WHERE pixels.is_protected = FALSE
                     RETURNING x
                 ),
                 inserted_history AS (

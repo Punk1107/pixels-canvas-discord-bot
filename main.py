@@ -129,8 +129,12 @@ class PixelBot(commands.Bot):
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"backups/canvas_backup_{stamp}.json"
             
-            with open(filename, 'w') as f:
-                json.dump(payload, f)
+            def save_json():
+                with open(filename, 'w') as f:
+                    json.dump(payload, f)
+
+            # Prevent blocking the main event loop
+            await asyncio.to_thread(save_json)
                 
             logger.info(f"Successfully backed up {len(payload)} pixels to {filename}")
         except Exception as e:

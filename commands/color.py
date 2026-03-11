@@ -10,12 +10,6 @@ class ColorCommand(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="color", description="Change a pixel's color on the canvas")
-    @app_commands.describe(
-        x="X coordinate of the pixel",
-        y="Y coordinate of the pixel",
-        color="Color name or hex code (e.g. red, #FF0000)"
-    )
     async def color_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         colors = ['red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown', 'black', 'white', 
                   'cyan', 'magenta', 'lime', 'teal', 'navy', 'maroon', 'olive', 'silver', 'gray', '#FF0000', 
@@ -25,6 +19,8 @@ class ColorCommand(commands.Cog):
             for c in colors if current.lower() in c.lower()
         ][:25] # max 25 choices for autocomplete
         
+    @app_commands.command(name="color", description="Change a pixel's color on the canvas")
+    @app_commands.describe(x="X coordinate of the pixel", y="Y coordinate of the pixel", color="Color name or hex code (e.g. red, #FF0000)")
     @app_commands.autocomplete(color=color_autocomplete)
     @app_commands.checks.cooldown(1, 3.0)
     async def color(self, interaction: discord.Interaction, x: int, y: int, color: str):
