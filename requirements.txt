@@ -1,0 +1,4 @@
+discord.py
+asyncpg
+pillow
+python-dotenv
