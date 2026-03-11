@@ -58,7 +58,7 @@ class PixelBot(commands.Bot):
         await db.connect()
         
         # Build initial canvas cache
-        pixels = await db.get_all_pixels()
+        pixels = await db.get_all_global_pixels()
         await canvas_cache.build_from_db(pixels)
         
         # Load extensions
@@ -118,13 +118,13 @@ class PixelBot(commands.Bot):
     async def auto_backup_canvas(self):
         try:
             logger.info("Starting automated canvas backup...")
-            pixels = await db.get_all_pixels()
+            pixels = await db.get_all_global_pixels()
             
             # Ensure backups directory exists
             os.makedirs("backups", exist_ok=True)
             
             # Build payload
-            payload = [{"x": p['x'], "y": p['y'], "color": p['color']} for p in pixels]
+            payload = [{"guild_id": p['guild_id'], "x": p['x'], "y": p['y'], "color": p['color']} for p in pixels]
             
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"backups/canvas_backup_{stamp}.json"

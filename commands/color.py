@@ -49,7 +49,7 @@ class ColorCommand(commands.Cog):
         try:
             r, g, b = ImageColor.getrgb(color)
             hex_color = '#{:02x}{:02x}{:02x}'.format(r, g, b).lower()
-            current_db_color = await db.get_current_pixel_color(x, y)
+            current_db_color = await db.get_current_pixel_color(interaction.guild_id, x, y)
             
             # Compare standard CSS hexes or direct string matches if the original was inserted raw
             if current_db_color:
@@ -71,8 +71,8 @@ class ColorCommand(commands.Cog):
             
         try:
             # We defer before updating the db
-            total_pixels = await db.update_pixel(x, y, color, interaction.user.id)
-            await canvas_cache.update_pixel(x, y, color)
+            total_pixels = await db.update_pixel(interaction.guild_id, x, y, color, interaction.user.id)
+            await canvas_cache.update_pixel(interaction.guild_id, x, y, color)
             
             # UX Improvement: Make the embed match the requested color
             r, g, b = ImageColor.getrgb(color)
@@ -102,7 +102,7 @@ class ColorCommand(commands.Cog):
         
         try:
             # 1. Get the last pixel
-            last_record = await db.get_last_user_pixel(interaction.user.id)
+            last_record = await db.get_last_user_pixel(interaction.guild_id, interaction.user.id)
             if not last_record:
                 await interaction.followup.send("❌ Could not find a recent pixel placement (within the last 5 minutes) to undo.", ephemeral=True)
                 return
@@ -112,17 +112,17 @@ class ColorCommand(commands.Cog):
             y = last_record['y']
             
             # 2. Check if pixel is protected
-            protected = await db.pool.fetchval('SELECT is_protected FROM pixels WHERE x = $1 AND y = $2', x, y)
+            protected = await db.pool.fetchval('SELECT is_protected FROM pixels WHERE guild_id = $1 AND x = $2 AND y = $3', interaction.guild_id, x, y)
             if protected:
                 await interaction.followup.send("❌ Cannot pull an undo on this pixel, it has since been protected.", ephemeral=True)
                 return
             
             # 3. Get the color it was BEFORE this placement
-            previous_color = await db.get_previous_pixel_color(x, y, record_id)
+            previous_color = await db.get_previous_pixel_color(interaction.guild_id, x, y, record_id)
             
             # 4. Apply the rollback
-            await db.undo_pixel(record_id, x, y, previous_color, interaction.user.id)
-            await canvas_cache.update_pixel(x, y, previous_color)
+            await db.undo_pixel(interaction.guild_id, record_id, x, y, previous_color, interaction.user.id)
+            await canvas_cache.update_pixel(interaction.guild_id, x, y, previous_color)
             
             embed = discord.Embed(
                 title="↩️ Pixel Undone",

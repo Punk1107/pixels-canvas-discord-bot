@@ -15,7 +15,7 @@ class CanvasCommand(commands.Cog):
         await interaction.response.defer()
         
         try:
-            image_buffer = await canvas_cache.get_image_bytes()
+            image_buffer = await canvas_cache.get_image_bytes(interaction.guild_id)
             
             file = discord.File(fp=image_buffer, filename="canvas.png")
             
@@ -37,8 +37,8 @@ class CanvasCommand(commands.Cog):
     async def reset(self, interaction: discord.Interaction, hard: bool = False):
         await interaction.response.defer()
         try:
-            await db.reset_canvas(hard)
-            await canvas_cache.reset()
+            await db.reset_canvas(interaction.guild_id, hard)
+            await canvas_cache.reset(interaction.guild_id)
             
             desc = "The canvas has been completely wiped (hard reset)." if hard else "The canvas has been cleared."
             embed = discord.Embed(
@@ -77,7 +77,7 @@ class CanvasCommand(commands.Cog):
         radius = min(max(1, radius), 20)
         
         try:
-            image_buffer = await canvas_cache.get_zoomed_image_bytes(x, y, radius)
+            image_buffer = await canvas_cache.get_zoomed_image_bytes(interaction.guild_id, x, y, radius)
             
             file = discord.File(fp=image_buffer, filename="view.png")
             
@@ -101,12 +101,12 @@ class CanvasCommand(commands.Cog):
         try:
             await interaction.followup.send("⏳ Generating timelapse... this might take a moment!")
             
-            history_data = await db.get_pixel_history_stream()
+            history_data = await db.get_pixel_history_stream(interaction.guild_id)
             if not history_data:
                 await interaction.channel.send("No pixels have been drawn yet!")
                 return
                 
-            gif_buffer = await canvas_cache.generate_timelapse_gif(history_data)
+            gif_buffer = await canvas_cache.generate_timelapse_gif(interaction.guild_id, history_data)
             file = discord.File(fp=gif_buffer, filename="timelapse.gif")
             
             embed = discord.Embed(
