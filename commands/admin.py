@@ -105,8 +105,8 @@ class AdminCommand(commands.Cog):
                     pixels_list.append((ix, iy, color))
             
             # Use batch update pipeline
-            await db.batch_update_pixels(pixels_list, interaction.user.id)
-            await canvas_cache.batch_update_pixels(pixels_list)
+            await db.batch_update_pixels(interaction.guild_id, pixels_list, interaction.user.id)
+            await canvas_cache.batch_update_pixels(interaction.guild_id, pixels_list)
             
             embed = discord.Embed(
                 title="🖌️ Canvas Area Filled",
@@ -175,8 +175,8 @@ class AdminCommand(commands.Cog):
                 return
                 
             # Use batch update pipeline
-            await db.batch_update_pixels(pixels_list, interaction.user.id)
-            await canvas_cache.batch_update_pixels(pixels_list)
+            await db.batch_update_pixels(interaction.guild_id, pixels_list, interaction.user.id)
+            await canvas_cache.batch_update_pixels(interaction.guild_id, pixels_list)
             
             embed = discord.Embed(
                 title="📝 Text Drawn",
