@@ -142,27 +142,39 @@ class PixelBot(commands.Bot):
 
     async def close(self):
         # Graceful shutdown handler
-        logger.info("Shutting down bot and closing database connections...")
+        logger.info("Initiating graceful shutdown...")
+        
+        # 1. Stop discord.ext.tasks loops
+        if self.auto_backup_canvas.is_running():
+            self.auto_backup_canvas.cancel()
+        if self.db_healthcheck.is_running():
+            self.db_healthcheck.cancel()
+
+        # 2. Close Web API Server
         try:
             if hasattr(self, 'web_runner') and self.web_runner:
                 await self.web_runner.cleanup()
                 logger.info("Web API Server gracefully closed.")
         except Exception as e:
-            pass
+            logger.error(f"Error closing Web API: {e}")
             
+        # 3. Close the Bot (Stops events and networking)
+        logger.info("Closing Discord connection...")
+        await super().close()
+
+        # 4. Cancel any remaining pending asyncio tasks
+        tasks_to_cancel = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        if tasks_to_cancel:
+            logger.info(f"Cancelling {len(tasks_to_cancel)} pending asyncio tasks...")
+            for task in tasks_to_cancel:
+                task.cancel()
+            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+            
+        # 5. Disconnect from database LAST to ensure tasks don't fail mid-execution
         try:
             await db.disconnect()
         except Exception as e:
             logger.error(f"Error disconnecting database: {e}")
-            
-        # Cancel any pending asyncio tasks safely
-        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-        [task.cancel() for task in tasks]
-        
-        logger.info(f"Cancelling {len(tasks)} pending tasks...")
-        await asyncio.gather(*tasks, return_exceptions=True)
-        
-        await super().close()
 
     async def on_app_command_error(self, interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
         embed = discord.Embed(

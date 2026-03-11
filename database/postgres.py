@@ -127,26 +127,34 @@ class Database:
 
     async def update_pixel(self, x: int, y: int, color: str, user_id: int):
         async with self.pool.acquire() as conn:
-            # Check if pixel is protected before doing anything
-            protected = await conn.fetchval('SELECT is_protected FROM pixels WHERE x = $1 AND y = $2', x, y)
-            if protected:
-                raise Exception("This pixel is administratively protected and cannot be overwritten.")
-                
-            # Using CTE (Common Table Expression) to reduce DB round-trips from 3 to 1
-            await conn.execute('''
-                WITH inserted_pixel AS (
+            # Using CTE (Common Table Expression) to reduce DB round-trips
+            protected = await conn.fetchval('''
+                WITH existing_pixel AS (
+                    SELECT is_protected FROM pixels WHERE x = $1 AND y = $2
+                ),
+                inserted_pixel AS (
                     INSERT INTO pixels (x, y, color)
-                    VALUES ($1, $2, $3)
+                    SELECT $1, $2, $3
+                    WHERE NOT COALESCE((SELECT is_protected FROM existing_pixel), FALSE)
                     ON CONFLICT (x, y) DO UPDATE SET color = EXCLUDED.color
+                    RETURNING x
                 ),
                 inserted_history AS (
                     INSERT INTO pixel_history (user_id, x, y, color)
-                    VALUES ($4, $1, $2, $3)
+                    SELECT $4, $1, $2, $3
+                    WHERE EXISTS (SELECT 1 FROM inserted_pixel)
+                ),
+                updated_stats AS (
+                    INSERT INTO user_stats (user_id, pixels_drawn)
+                    SELECT $4, 1
+                    WHERE EXISTS (SELECT 1 FROM inserted_pixel)
+                    ON CONFLICT (user_id) DO UPDATE SET pixels_drawn = user_stats.pixels_drawn + 1
                 )
-                INSERT INTO user_stats (user_id, pixels_drawn)
-                VALUES ($4, 1)
-                ON CONFLICT (user_id) DO UPDATE SET pixels_drawn = user_stats.pixels_drawn + 1;
+                SELECT is_protected FROM existing_pixel;
             ''', x, y, color, user_id)
+            
+            if protected:
+                raise Exception("This pixel is administratively protected and cannot be overwritten.")
             
             # 4. Increment global pixel count
             return await conn.fetchval('UPDATE global_stats SET total_pixels = total_pixels + 1 WHERE id = 1 RETURNING total_pixels')
@@ -337,33 +345,42 @@ class Database:
             ''')
             
     async def batch_update_pixels(self, pixels_list, user_id: int):
-        # High performance insertions using executemany for rectangles/fills
+        # High performance insertions using UNNEST array unpacking to CTE
         async with self.pool.acquire() as conn:
-            # Filter out protected pixels during the batch processing softly by only updating non-protected ones
-            async with conn.transaction():
-                # 1. Update pixels table
-                await conn.executemany('''
+            xs = [p[0] for p in pixels_list]
+            ys = [p[1] for p in pixels_list]
+            colors = [p[2] for p in pixels_list]
+            
+            updated_count = await conn.fetchval('''
+                WITH input_data AS (
+                    SELECT * FROM unnest($1::int[], $2::int[], $3::text[]) AS t(new_x, new_y, new_color)
+                ),
+                inserted_pixels AS (
                     INSERT INTO pixels (x, y, color)
-                    VALUES ($1, $2, $3)
+                    SELECT new_x, new_y, new_color
+                    FROM input_data
                     ON CONFLICT (x, y) DO UPDATE SET color = EXCLUDED.color
                     WHERE pixels.is_protected = FALSE
-                ''', pixels_list)
-                
-                # 2. Add to history
-                await conn.executemany('''
+                    RETURNING x, y, color
+                ),
+                inserted_history AS (
                     INSERT INTO pixel_history (x, y, color, user_id)
-                    VALUES ($1, $2, $3, $4)
-                ''', [(p[0], p[1], p[2], user_id) for p in pixels_list])
-                
-                # 3. Update Stats (user gets credit for batch edits)
-                await conn.execute('''
+                    SELECT x, y, color, $4
+                    FROM inserted_pixels
+                ),
+                updated_stats AS (
                     INSERT INTO user_stats (user_id, pixels_drawn)
-                    VALUES ($1, $2)
-                    ON CONFLICT (user_id) DO UPDATE SET pixels_drawn = user_stats.pixels_drawn + $2
-                ''', user_id, len(pixels_list))
-                
-                # 4. Increment global stats
-                return await conn.fetchval('UPDATE global_stats SET total_pixels = total_pixels + $1 WHERE id = 1 RETURNING total_pixels', len(pixels_list))
+                    SELECT $4, COUNT(*)
+                    FROM inserted_pixels
+                    HAVING COUNT(*) > 0
+                    ON CONFLICT (user_id) DO UPDATE SET pixels_drawn = user_stats.pixels_drawn + EXCLUDED.pixels_drawn
+                )
+                SELECT COUNT(*) FROM inserted_pixels
+            ''', xs, ys, colors, user_id)
+            
+            # Increment global stats
+            if updated_count and updated_count > 0:
+                return await conn.fetchval('UPDATE global_stats SET total_pixels = total_pixels + $1 WHERE id = 1 RETURNING total_pixels', updated_count)
                 
     async def get_all_pixels(self):
         # Used for full JSON backups

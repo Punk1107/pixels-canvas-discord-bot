@@ -1,6 +1,7 @@
 from PIL import Image, ImageDraw, ImageColor
 import io
 import asyncio
+from contextlib import asynccontextmanager
 from config import CANVAS_WIDTH, CANVAS_HEIGHT, PIXEL_SCALE
 import logging
 
@@ -29,10 +30,18 @@ class CanvasCache:
         for y in range(0, CANVAS_HEIGHT * PIXEL_SCALE, PIXEL_SCALE):
             self.draw.line([(0, y), (CANVAS_WIDTH * PIXEL_SCALE, y)], fill='#E0E0E0', width=1)
             
+    @asynccontextmanager
+    async def _lock_with_timeout(self, timeout: float):
+        await asyncio.wait_for(self.lock.acquire(), timeout=timeout)
+        try:
+            yield
+        finally:
+            self.lock.release()
+            
     async def build_from_db(self, pixels_data):
         """Build the initial canvas state from database records"""
         try:
-            async with asyncio.wait_for(self.lock.acquire(), timeout=10.0):
+            async with self._lock_with_timeout(10.0):
                 for record in pixels_data:
                     x, y, color = record['x'], record['y'], record['color']
                     self._draw_pixel_sync(x, y, color)
@@ -56,7 +65,7 @@ class CanvasCache:
     async def update_pixel(self, x: int, y: int, color: str):
         """Update a single pixel in the cache"""
         try:
-            async with asyncio.wait_for(self.lock.acquire(), timeout=5.0):
+            async with self._lock_with_timeout(5.0):
                 self._draw_pixel_sync(x, y, color)
         except asyncio.TimeoutError:
             logger.error(f"Timeout: Failed to acquire canvas lock to update pixel {x},{y}")
@@ -64,7 +73,7 @@ class CanvasCache:
     async def batch_update_pixels(self, pixels_list):
         """Update multiple pixels instantly in memory."""
         try:
-            async with asyncio.wait_for(self.lock.acquire(), timeout=5.0):
+            async with self._lock_with_timeout(5.0):
                 for x, y, color in pixels_list:
                     self._draw_pixel_sync(x, y, color)
         except asyncio.TimeoutError:
@@ -99,7 +108,7 @@ class CanvasCache:
         """Get a zoomed in crop of the canvas"""
         try:
             async with self.heavy_semaphore:
-                async with asyncio.wait_for(self.lock.acquire(), timeout=5.0):
+                async with self._lock_with_timeout(5.0):
                     return await asyncio.to_thread(self._get_zoomed_image_bytes_sync, x, y, radius)
         except asyncio.TimeoutError:
             logger.error("Timeout: Failed to acquire canvas lock for get_zoomed_image")
@@ -160,7 +169,7 @@ class CanvasCache:
         """Get the current canvas as a PNG byte buffer"""
         try:
             async with self.heavy_semaphore:
-                async with asyncio.wait_for(self.lock.acquire(), timeout=5.0):
+                async with self._lock_with_timeout(5.0):
                     return await asyncio.to_thread(self._get_image_bytes_sync)
         except asyncio.TimeoutError:
             logger.error("Timeout: Failed to acquire canvas lock for get_image_bytes")
@@ -169,7 +178,7 @@ class CanvasCache:
     async def reset(self):
         """Reset the canvas back to white with grid"""
         try:
-            async with asyncio.wait_for(self.lock.acquire(), timeout=5.0):
+            async with self._lock_with_timeout(5.0):
                 self.draw.rectangle([0, 0, CANVAS_WIDTH * PIXEL_SCALE, CANVAS_HEIGHT * PIXEL_SCALE], fill='white')
                 # Redraw grid
                 for x in range(0, CANVAS_WIDTH * PIXEL_SCALE, PIXEL_SCALE):
