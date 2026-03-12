@@ -100,6 +100,16 @@ class Database:
                 );
             ''')
             
+            # Migration: Ensure guild_id exists in all relevant tables
+            for table in ['pixels', 'pixel_history', 'user_stats']:
+                try:
+                    # Using a separate block to ensure each table attempt is isolated
+                    await conn.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS guild_id BIGINT DEFAULT 0;')
+                    # Ensure NOT NULL if it was added without it (though DEFAULT usually handles it)
+                    await conn.execute(f'ALTER TABLE {table} ALTER COLUMN guild_id SET NOT NULL;')
+                except Exception as e:
+                    logger.warning(f"Migration check for {table}.guild_id: {e}")
+
             # create index for leaderboard
             await conn.execute('''
                 CREATE INDEX IF NOT EXISTS idx_user_stats_pixels_drawn_guild ON user_stats(guild_id, pixels_drawn DESC);
