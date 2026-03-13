@@ -39,6 +39,7 @@ class Database:
             logger.info("Closing database connection pool...")
             await self.pool.close()
 
+
     async def init_db(self):
         async with self.pool.acquire() as conn:
             # pixels table
@@ -53,6 +54,20 @@ class Database:
                 );
             ''')
             
+            # Migration for pixels: Ensure composite primary key (guild_id, x, y)
+            pk_info = await conn.fetchval('''
+                SELECT pg_get_constraintdef(c.oid)
+                FROM pg_constraint c
+                WHERE c.conrelid = 'pixels'::regclass AND c.contype = 'p'
+            ''')
+            if pk_info and 'guild_id' not in pk_info:
+                logger.info("Migrating 'pixels' primary key to include guild_id...")
+                try:
+                    await conn.execute('ALTER TABLE pixels DROP CONSTRAINT pixels_pkey')
+                    await conn.execute('ALTER TABLE pixels ADD PRIMARY KEY (guild_id, x, y)')
+                except Exception as e:
+                    logger.error(f"Failed to migrate pixels PK: {e}")
+
             # safely add is_protected column if it does not exist (for existing databases)
             try:
                 await conn.execute('''
@@ -99,6 +114,20 @@ class Database:
                     PRIMARY KEY (guild_id, user_id)
                 );
             ''')
+
+            # Migration for user_stats: Ensure composite primary key (guild_id, user_id)
+            pk_info_stats = await conn.fetchval('''
+                SELECT pg_get_constraintdef(c.oid)
+                FROM pg_constraint c
+                WHERE c.conrelid = 'user_stats'::regclass AND c.contype = 'p'
+            ''')
+            if pk_info_stats and 'guild_id' not in pk_info_stats:
+                logger.info("Migrating 'user_stats' primary key to include guild_id...")
+                try:
+                    await conn.execute('ALTER TABLE user_stats DROP CONSTRAINT user_stats_pkey')
+                    await conn.execute('ALTER TABLE user_stats ADD PRIMARY KEY (guild_id, user_id)')
+                except Exception as e:
+                    logger.error(f"Failed to migrate user_stats PK: {e}")
             
             # Migration: Ensure guild_id exists in all relevant tables
             for table in ['pixels', 'pixel_history', 'user_stats']:
